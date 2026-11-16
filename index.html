@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Feedbackbögen – Gut Steinbach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+/* ===== EINSTELLUNGEN (pro Haus anpassen) ===== */
+const CONFIG = {
+  haus: "Gut Steinbach",
+  standort: "Gut Steinbach",               // Wert der Standort-Spalte in 'Technik - Tickets'
+  kuerzel: "GS",                           // Vorsilbe der ImportID
+  mail: "feedback-import@gutsteinbach.de", // Import-Postfach (Flow lauscht hier)
+  prioritaeten: ["Hoch", "Mittel", "Niedrig"],
+  stimmungen: ["Positiv", "Neutral", "Negativ"],
+  kategorien: ["Sanitär", "Elektro / Licht", "Heizung / Klima / Lüftung", "Möbel / Schreiner",
+    "Schließsystem / Türen / Fenster", "TV / WLAN / IT", "Wellness / SPA / Pool",
+    "Küche / Gastrogeräte", "Außenanlage", "Sonstiges"]
+};
+</script>
+<style>
+:root{
+  --blau:#75B7D6;--blau-d:#2F6F8F;--blau-h:#DCEDF5;--grau:#676869;--sand:#E7DFD8;--sand-h:#F5F1EE;
+  --text:#2B2B29;--text-s:#5A5B5C;--rot:#A4453A;--gelb:#B7802A;--gelb-h:#F3E6CC;--gruen:#3C7A4A;--rahmen:#B5ADA6;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--sand-h);color:var(--text);font:15px/1.5 Lato,"Segoe UI",Arial,sans-serif;padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+header{background:var(--grau);color:#fff;padding:calc(14px + env(safe-area-inset-top,0px)) 16px 14px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+header h1{font:400 22px/1.2 Georgia,serif;margin:0}
+header span{font-size:13px;opacity:.85}
+main{max-width:860px;margin:0 auto;padding:16px}
+h2{font:400 19px/1.3 Georgia,serif;margin:0 0 12px}
+.panel{background:#fff;border:1px solid var(--sand);border-radius:12px;padding:16px;margin-bottom:16px}
+.felder{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+label.f{display:block;font-size:13px;color:var(--text-s)}
+input[type=text],input[type=date],select,textarea{width:100%;font:inherit;color:var(--text);background:#fff;border:1px solid var(--rahmen);border-radius:8px;padding:9px 12px;margin-top:4px}
+textarea{resize:vertical;min-height:44px}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--blau-d);outline-offset:1px}
+.drop{display:block;border:2px dashed var(--rahmen);border-radius:12px;padding:28px 16px;text-align:center;cursor:pointer;background:var(--sand-h)}
+.drop:hover,.drop.over{border-color:var(--blau-d);background:var(--blau-h)}
+.drop b{display:block;font:400 18px Georgia,serif;margin-bottom:4px}
+.drop small{color:var(--text-s)}
+.drop input{display:none}
+.hinweis{font-size:13px;color:var(--text-s);margin:10px 0 0}
+.btn{font:700 15px Lato,Arial,sans-serif;border:0;border-radius:8px;min-height:48px;padding:0 20px;cursor:pointer;background:var(--blau);color:var(--text)}
+.btn:hover{background:var(--blau-d);color:#fff}
+.btn.sek{background:#fff;border:1px solid var(--rahmen)}
+.btn.sek:hover{background:var(--sand);color:var(--text)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.bogen{background:#fff;border:1px solid var(--sand);border-radius:12px;margin-bottom:16px;overflow:hidden}
+.bogen-kopf{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;background:var(--sand-h);border-bottom:1px solid var(--sand)}
+.bogen-kopf h3{font:400 18px Georgia,serif;margin:0}
+.teil{padding:16px;border-bottom:1px solid var(--sand)}
+.teil:last-child{border-bottom:0}
+.teil.aus .inhalt{display:none}
+.schalter{display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer;min-height:44px}
+.schalter input{width:20px;height:20px;accent-color:var(--blau-d)}
+.inhalt{margin-top:8px}
+.ausschnitt{display:block;max-width:100%;border:1px solid var(--sand);border-radius:8px;margin-top:6px;background:#fbf9f2}
+.feld{margin-bottom:14px}
+.bew{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px 20px;margin-bottom:14px}
+.bew-zeile{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 6px;border-radius:8px}
+.bew-zeile.warn{background:var(--gelb-h)}
+.bew-zeile span{font-size:14px}
+.punkte{display:flex;gap:4px}
+.punkte button{width:34px;height:34px;border-radius:50%;border:1px solid var(--rahmen);background:#fff;color:var(--text);font:700 13px Lato,Arial,sans-serif;cursor:pointer;padding:0}
+.punkte button.an{background:var(--blau);border-color:var(--blau);}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chips button{border:1px solid var(--rahmen);background:#fff;border-radius:20px;min-height:40px;padding:0 14px;font:13px Lato,Arial,sans-serif;color:var(--text);cursor:pointer}
+.chips button.an{background:var(--blau);border-color:var(--blau);font-weight:700}
+.pruefen{background:var(--gelb-h);color:#6B4A0C;border-radius:8px;padding:8px 12px;font-size:14px;margin-bottom:14px}
+.pruefen:empty{display:none}
+details{margin-top:4px;font-size:14px}
+summary{cursor:pointer;color:var(--blau-d);min-height:32px}
+details img{max-width:100%;border-radius:8px;border:1px solid var(--sand)}
+.leise{color:var(--text-s);font-size:13px}
+footer{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--sand);padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center}
+footer .in{max-width:860px;width:100%;display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}
+#zusammen{font-size:14px;color:var(--text-s)}
+.adresse{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.adresse code{background:var(--sand-h);padding:6px 10px;border-radius:6px;font-size:14px}
+#status{padding:12px 16px;border-radius:8px;margin-bottom:16px;display:none}
+#status.ok{display:block;background:#E3EFE6;color:var(--gruen)}
+#status.fehler{display:block;background:#F4E2DF;color:var(--rot)}
+#arbeit{display:none;text-align:center;padding:24px;color:var(--text-s)}
+@media (max-width:560px){.felder{grid-template-columns:1fr}.bew{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><h1>Feedbackbögen erfassen</h1><span id="hausname"></span></header>
+<main>
+  <div id="status"></div>
+
+  <section class="panel">
+    <div class="felder">
+      <label class="f">Erfasst von *<input type="text" id="erfasstVon" placeholder="Dein Name" autocomplete="name"></label>
+      <label class="f">Datum der Bögen<input type="date" id="datum"></label>
+    </div>
+    <label class="drop" id="drop" style="margin-top:14px">
+      <b>Scan oder Fotos wählen</b>
+      <small>PDF aus dem Scanner oder Fotos der Bögen · Vorder- und Rückseite in Reihenfolge</small>
+      <input type="file" id="dateien" accept="application/pdf,image/*" multiple>
+    </label>
+    <p class="hinweis">Alles bleibt auf diesem Gerät. Für Fotos: Bogen flach und gerade aufnehmen, der schwarze Balken oben muss ganz zu sehen sein.</p>
+  </section>
+
+  <div id="arbeit">Bögen werden gelesen …</div>
+  <div id="liste"></div>
+</main>
+
+<footer><div class="in">
+  <div id="zusammen">Noch keine Bögen geladen</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn sek" id="btnLaden" disabled>Nur herunterladen</button>
+    <button class="btn" id="btnSenden" disabled>Datei senden</button>
+  </div>
+</div></footer>
+
+<script>
+"use strict";
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ===== Layout des Bogens (Einheiten: Breite des schwarzen Kopfbalkens = 1000) ===== */
+const VORNE = {
+  bewertungen: [
+    {key:"Gesamt", label:"Gesamteindruck", v:297, us:[602,677,752,827,902], r:30},
+    {key:"Reservierung", label:"Reservierung", v:462, us:[76,148,220,293,365], r:25},
+    {key:"Checkin", label:"Check-in", v:462, us:[533,605,678,750,823], r:25},
+    {key:"BewZimmer", label:"Zimmer & Ausstattung", v:618, us:[76,148,220,293,365], r:25},
+    {key:"Fruehstueck", label:"Frühstück", v:618, us:[533,605,678,750,823], r:25},
+    {key:"Abendessen", label:"Abendessen", v:763, us:[76,148,220,293,365], r:25},
+    {key:"SPA", label:"Heimat & Natur SPA", v:763, us:[533,605,678,750,823], r:25}
+  ],
+  name:[40,240,470,350], star:[40,850,960,985], gefallen:[40,1030,960,1165], verbessern:[40,1205,960,1340]
+};
+const HINTEN = {
+  kat:[
+    {txt:"Beleuchtung/Elektrik", kat:"Elektro / Licht", u:84, v:771},
+    {txt:"Sanitär/Bad/WC", kat:"Sanitär", u:84, v:820},
+    {txt:"TV", kat:"TV / WLAN / IT", u:84, v:870},
+    {txt:"Balkon", kat:"Sonstiges", u:84, v:923},
+    {txt:"Heizung", kat:"Heizung / Klima / Lüftung", u:490, v:771},
+    {txt:"Fenster/Türen/Schlösser", kat:"Schließsystem / Türen / Fenster", u:490, v:820},
+    {txt:"Möbel/Einrichtung", kat:"Möbel / Schreiner", u:490, v:870},
+    {txt:"Sonstiges", kat:"Sonstiges", u:490, v:923}
+  ],
+  zutritt:[{txt:"Ja, jederzeit", u:84, v:1313}, {txt:"Bitte vorher anrufen", u:328, v:1313}],
+  zimmer:[40,565,320,660], beschreibung:[40,1025,905,1220], beschreibungInnen:[70,1055,875,1190]
+};
+
+/* ===== Bild laden ===== */
+const ARBEITSBREITE = 1200;
+async function dateienLaden(files){
+  const seiten = [];
+  for (const f of files){
+    if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)){
+      const pdf = await pdfjsLib.getDocument({data: await f.arrayBuffer()}).promise;
+      for (let i = 1; i <= pdf.numPages; i++){
+        const page = await pdf.getPage(i);
+        const vp1 = page.getViewport({scale:1});
+        const vp = page.getViewport({scale: ARBEITSBREITE / vp1.width});
+        const cv = document.createElement("canvas"); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+        const ctx = cv.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0,0,cv.width,cv.height);
+        await page.render({canvasContext: ctx, viewport: vp}).promise;
+        seiten.push(cv);
+      }
+    } else if (f.type.startsWith("image/")){
+      const url = URL.createObjectURL(f);
+      const img = await new Promise((ok, err) => { const i = new Image(); i.onload = () => ok(i); i.onerror = err; i.src = url; });
+      const s = ARBEITSBREITE / img.naturalWidth;
+      const cv = document.createElement("canvas"); cv.width = ARBEITSBREITE; cv.height = Math.round(img.naturalHeight * s);
+      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url);
+      seiten.push(cv);
+    }
+  }
+  return seiten;
+}
+
+/* ===== Kopfbalken finden ===== */
+function linFit(xs, ys){
+  const n = xs.length; let sx=0, sy=0, sxx=0, sxy=0;
+  for (let i=0;i<n;i++){ sx+=xs[i]; sy+=ys[i]; sxx+=xs[i]*xs[i]; sxy+=xs[i]*ys[i]; }
+  const a = (n*sxy - sx*sy) / ((n*sxx - sx*sx) || 1);
+  return [a, (sy - a*sx)/n];
+}
+const median = a => { const s=[...a].sort((x,y)=>x-y); return s.length ? s[Math.floor(s.length/2)] : 0; };
+
+function analysiere(cv){
+  const w = cv.width, h = cv.height;
+  const d = cv.getContext("2d").getImageData(0,0,w,h).data;
+  const dunkel = new Uint8Array(w*h);
+  for (let i=0, p=0; i<w*h; i++, p+=4) dunkel[i] = (d[p]+d[p+1]+d[p+2]) < 210 ? 1 : 0;
+  const luecke = Math.round(w*0.035);
+  const zeilen = new Array(h);
+  for (let y=0; y<h; y++){
+    let best={s:0,e:0,len:0}, cs=-1, last=-10;
+    const o = y*w;
+    for (let x=0; x<w; x++){
+      if (!dunkel[o+x]) continue;
+      if (cs < 0 || x - last > luecke){ if (cs>=0 && last-cs > best.len) best={s:cs,e:last,len:last-cs}; cs = x; }
+      last = x;
+    }
+    if (cs>=0 && last-cs > best.len) best={s:cs,e:last,len:last-cs};
+    zeilen[y] = best;
+  }
+  const baender = []; let cur = null, miss = 0;
+  for (let y=0; y<h; y++){
+    if (zeilen[y].len > 0.3*w){
+      if (!cur) cur = {y0:y, y1:y, rows:[]};
+      cur.y1 = y; cur.rows.push(y); miss = 0;
+    } else if (cur && ++miss > 2){ baender.push(cur); cur = null; miss = 0; }
+  }
+  if (cur) baender.push(cur);
+  for (const b of baender){ b.L = median(b.rows.map(y => zeilen[y].len)); b.H = b.y1 - b.y0; }
+  const kopf = baender.find(b => b.H >= 0.1*b.L && b.L > 0.3*w);
+  if (!kopf) return null;
+  const fuss = baender.find(b => b.y0 > kopf.y0 + 1.0*kopf.L && b.H >= 0.035*kopf.L && b.H <= 0.12*kopf.L && Math.abs(b.L - kopf.L) < 0.1*kopf.L);
+  // Kanten genau einpassen
+  const ys=[], ls=[], rs=[];
+  for (const y of kopf.rows) if (y > kopf.y0 + 0.2*kopf.H && y < kopf.y0 + 0.8*kopf.H){ ys.push(y); ls.push(zeilen[y].s); rs.push(zeilen[y].e); }
+  const [c, dd] = linFit(ys, ls);
+  const mL = median(ls), mR = median(rs);
+  const xs=[], tops=[];
+  for (let x = Math.round(mL + 0.05*kopf.L); x < mR - 0.05*kopf.L; x += 4){
+    for (let y = Math.max(0, kopf.y0 - 12); y < kopf.y0 + 0.3*kopf.H; y++) if (dunkel[y*w+x]){ xs.push(x); tops.push(y); break; }
+  }
+  const [a, b] = linFit(xs, tops);
+  const X = (c*b + dd) / (1 - c*a), Y = a*X + b;
+  const t = Math.atan(a);
+  const W = (mR - mL) * Math.cos(t);
+  return {H:{X, Y, t, W}, vorne: !!fuss, d, w, h};
+}
+
+const pt = (H, u, v) => { const s = H.W/1000; return [H.X + (u*Math.cos(H.t) - v*Math.sin(H.t))*s, H.Y + (u*Math.sin(H.t) + v*Math.cos(H.t))*s]; };
+
+function scheibe(A, u, v, r, f){
+  const [x, y] = pt(A.H, u, v); const R = r*f*A.H.W/1000;
+  let n=0, blau=0, dunkel=0;
+  for (let yy = Math.floor(y-R); yy <= y+R; yy++){
+    if (yy<0 || yy>=A.h) continue;
+    for (let xx = Math.floor(x-R); xx <= x+R; xx++){
+      if (xx<0 || xx>=A.w || (xx-x)**2 + (yy-y)**2 > R*R) continue;
+      const p = (yy*A.w + xx)*4, rr=A.d[p], gg=A.d[p+1], bb=A.d[p+2], br=(rr+gg+bb)/3;
+      n++;
+      if (bb-rr > 30 && bb >= gg && br < 215) blau++;
+      if (br < 110 && Math.abs(bb-rr) < 40) dunkel++;
+    }
+  }
+  return {blau: n ? blau/n : 0, dunkel: n ? dunkel/n : 0};
+}
+function kasten(A, [u0,v0,u1,v1]){
+  const [x0,y0] = pt(A.H,u0,v0), [x1,y1] = pt(A.H,u1,v1);
+  let n=0, blau=0, dunkel=0;
+  for (let y=Math.max(0,Math.round(y0)); y<Math.min(A.h,y1); y+=2) for (let x=Math.max(0,Math.round(x0)); x<Math.min(A.w,x1); x+=2){
+    const p=(y*A.w+x)*4, rr=A.d[p], gg=A.d[p+1], bb=A.d[p+2], br=(rr+gg+bb)/3;
+    n++; if (bb-rr>30 && br<215) blau++; if (br<110 && Math.abs(bb-rr)<40) dunkel++;
+  }
+  return {blau: n?blau/n:0, dunkel: n?dunkel/n:0};
+}
+function zeile(A, def){
+  const roh = def.us.map(u => ({b: scheibe(A,u,def.v,def.r,1.15).blau, d: scheibe(A,u,def.v,def.r,0.7).dunkel}));
+  const md = median(roh.map(x=>x.d));
+  const s = roh.map(x => x.b + Math.max(0, x.d - md));
+  const max = Math.max(...s), i = s.indexOf(max);
+  if (max < 0.03) return {wert:null, status:"leer"};
+  if (s.filter(x => x >= 0.5*max).length >= 3) return {wert:null, status:"unklar", notiz:"mehrere Kreise markiert"};
+  const sortiert = [...s].sort((x,y)=>y-x), zweit = sortiert[1];
+  if (zweit >= 0.045 && zweit/max >= 0.22){
+    const j = s.indexOf(zweit);
+    return {wert:i+1, status:"unsicher", notiz:`${Math.min(i,j)+1} oder ${Math.max(i,j)+1} markiert`};
+  }
+  return {wert:i+1, status:"ok"};
+}
+function ausschnitt(cv, A, [u0,v0,u1,v1]){
+  const p = [pt(A.H,u0,v0), pt(A.H,u1,v0), pt(A.H,u0,v1), pt(A.H,u1,v1)];
+  const x0 = Math.max(0, Math.min(...p.map(q=>q[0]))), x1 = Math.min(cv.width, Math.max(...p.map(q=>q[0])));
+  const y0 = Math.max(0, Math.min(...p.map(q=>q[1]))), y1 = Math.min(cv.height, Math.max(...p.map(q=>q[1])));
+  const s = Math.min(1, 640/(x1-x0));
+  const c = document.createElement("canvas"); c.width = Math.max(1,Math.round((x1-x0)*s)); c.height = Math.max(1,Math.round((y1-y0)*s));
+  c.getContext("2d").drawImage(cv, x0, y0, x1-x0, y1-y0, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.75);
+}
+function vorschau(cv, A, punkte){
+  const s = 520/cv.width;
+  const c = document.createElement("canvas"); c.width = 520; c.height = Math.round(cv.height*s);
+  const ctx = c.getContext("2d"); ctx.drawImage(cv, 0, 0, c.width, c.height);
+  if (A) for (const q of punkte){
+    const [x,y] = pt(A.H, q.u, q.v); ctx.beginPath();
+    ctx.arc(x*s, y*s, q.r*A.H.W/1000*s*1.2, 0, Math.PI*2);
+    ctx.lineWidth = q.an ? 3 : 1.2; ctx.strokeStyle = q.an ? "#3C7A4A" : "rgba(47,111,143,.7)"; ctx.stroke();
+  }
+  return c.toDataURL("image/jpeg", 0.7);
+}
+
+/* ===== Seiten auswerten ===== */
+function liesVorne(cv, A){
+  const bew = {}, punkte = [];
+  for (const def of VORNE.bewertungen){
+    bew[def.key] = zeile(A, def);
+    def.us.forEach((u,i) => punkte.push({u, v:def.v, r:def.r, an: bew[def.key].wert === i+1}));
+  }
+  return {
+    bew,
+    bild: {name: ausschnitt(cv,A,VORNE.name), star: ausschnitt(cv,A,VORNE.star), gefallen: ausschnitt(cv,A,VORNE.gefallen), verbessern: ausschnitt(cv,A,VORNE.verbessern)},
+    vorschau: vorschau(cv, A, punkte)
+  };
+}
+function liesHinten(cv, A){
+  const roh = HINTEN.kat.map(k => scheibe(A,k.u,k.v,16,1.3).blau + scheibe(A,k.u,k.v,16,0.6).dunkel);
+  const md = median(roh);
+  const kats = HINTEN.kat.filter((k,i) => roh[i] - md >= 0.05 || scheibe(A,k.u,k.v,16,1.3).blau >= 0.05);
+  const zutritt = HINTEN.zutritt.filter(z => scheibe(A,z.u,z.v,16,1.3).blau >= 0.05).map(z => z.txt);
+  const ink = kasten(A, HINTEN.beschreibungInnen);
+  const text = ink.blau > 0.003 || ink.dunkel > 0.006;
+  const punkte = [...HINTEN.kat.map(k => ({u:k.u, v:k.v, r:16, an: kats.includes(k)})), ...HINTEN.zutritt.map(z => ({u:z.u, v:z.v, r:16, an: zutritt.includes(z.txt)}))];
+  return {
+    kats, zutritt, text,
+    bild: {zimmer: ausschnitt(cv,A,HINTEN.zimmer), beschreibung: ausschnitt(cv,A,HINTEN.beschreibung)},
+    vorschau: vorschau(cv, A, punkte)
+  };
+}
+
+let boegen = [];
+let lauf = 0;
+
+async function verarbeite(files){
+  $("#arbeit").style.display = "block"; status("");
+  try {
+    const seiten = await dateienLaden(files);
+    for (const cv of seiten){
+      await new Promise(r => setTimeout(r, 0));
+      const A = analysiere(cv);
+      const letzter = boegen[boegen.length-1];
+      if (!A){
+        boegen.push(neuerBogen({fehler:true, bild: vorschau(cv, null, [])}));
+      } else if (A.vorne){
+        boegen.push(neuerBogen({vorne: liesVorne(cv, A)}));
+      } else {
+        const h = liesHinten(cv, A);
+        if (letzter && letzter.vorne && !letzter.hinten && !letzter.fehler) haengeHintenAn(letzter, h);
+        else boegen.push(neuerBogen({hinten: h}));
+      }
+    }
+    zeichne();
+  } catch(e){
+    console.error(e); status("Die Datei konnte nicht gelesen werden. Bitte als PDF oder JPG/PNG wählen.", "fehler");
+  }
+  $("#arbeit").style.display = "none";
+}
+
+function neuerBogen({vorne, hinten, fehler, bild}){
+  const b = {id: ++lauf, vorne, hinten:null, fehler, fehlerBild: bild,
+    fb: {aktiv: !!vorne, Zimmer:"", Gast:"", Star:"", Gefallen:"", Verbessern:"", Stimmung:"", Prioritaet:"Niedrig", stimmungFest:false, werte:{}},
+    tk: {aktiv:false, Zimmer:"", Beschreibung:"", Kategorie:"", Prioritaet:"Mittel", zutritt:[]}};
+  if (vorne){
+    for (const def of VORNE.bewertungen) b.fb.werte[def.key] = vorne.bew[def.key].wert;
+    stimmungSetzen(b);
+  }
+  if (hinten) haengeHintenAn(b, hinten);
+  return b;
+}
+function haengeHintenAn(b, h){
+  b.hinten = h;
+  b.tk.aktiv = h.kats.length > 0 || h.text;
+  b.tk.Kategorie = h.kats[0] ? h.kats[0].kat : "";
+  b.tk.zutritt = h.zutritt;
+}
+function stimmungSetzen(b){
+  if (b.fb.stimmungFest) return;
+  const g = b.fb.werte.Gesamt;
+  b.fb.Stimmung = g == null ? "" : g >= 4 ? "Positiv" : g === 3 ? "Neutral" : "Negativ";
+  b.fb.Prioritaet = g == null || g >= 4 ? "Niedrig" : g === 3 ? "Mittel" : "Hoch";
+}
+
+/* ===== Anzeige ===== */
+function optionen(liste, wert, leer){ return (leer ? `<option value="">${leer}</option>` : "") + liste.map(x => `<option${x===wert?" selected":""}>${esc(x)}</option>`).join(""); }
+
+function pruefHinweise(b){
+  const h = [];
+  if (b.fehler) h.push("Bogen nicht erkannt – Felder bitte von Hand ausfüllen.");
+  if (b.vorne && b.fb.aktiv){
+    for (const def of VORNE.bewertungen){ const r = b.vorne.bew[def.key]; if (r.status === "unsicher" || r.status === "unklar") h.push(`${def.label}: ${r.notiz}`); }
+    if (!b.fb.Zimmer && !b.fb.Gast) h.push("Zimmer oder Name eintragen (aus dem Ausschnitt).");
+  }
+  if (b.tk.aktiv){
+    if (!tkZimmer(b)) h.push("Ticket: Zimmernummer fehlt.");
+    if (!b.tk.Beschreibung) h.push("Ticket: Beschreibung abtippen.");
+    if (!b.tk.Kategorie) h.push("Ticket: Kategorie wählen.");
+    if (b.hinten && b.hinten.kats.length > 1) h.push("Ticket: mehrere Kategorien angekreuzt – erste übernommen.");
+  }
+  return h;
+}
+const tkZimmer = b => b.tk.Zimmer || b.fb.Zimmer;
+
+function zeichne(){
+  $("#liste").innerHTML = boegen.map(b => {
+    const v = b.vorne, hi = b.hinten;
+    const bewHtml = v ? VORNE.bewertungen.map(def => {
+      const r = v.bew[def.key], warn = r.status === "unsicher" || r.status === "unklar";
+      return `<div class="bew-zeile${warn?" warn":""}" data-zeile="${def.key}"><span>${def.label}</span><div class="punkte">${[1,2,3,4,5].map(n =>
+        `<button type="button" data-b="${b.id}" data-wert="${def.key}" data-n="${n}" class="${b.fb.werte[def.key]===n?"an":""}" aria-label="${def.label} ${n}">${n}</button>`).join("")}</div></div>`;
+    }).join("") : "";
+    const fbTeil = (v || b.fehler) ? `
+      <div class="teil${b.fb.aktiv?"":" aus"}" data-teil="fb">
+        <label class="schalter"><input type="checkbox" data-b="${b.id}" data-k="fb.aktiv"${b.fb.aktiv?" checked":""}> Gästefeedback übernehmen</label>
+        <div class="inhalt">
+          ${v ? `<img class="ausschnitt" src="${v.bild.name}" alt="Name und Zimmer, Handschrift">` : ""}
+          <div class="felder feld" style="margin-top:8px">
+            <label class="f">Zimmer<input type="text" inputmode="numeric" data-b="${b.id}" data-k="fb.Zimmer" value="${esc(b.fb.Zimmer)}"></label>
+            <label class="f">Name (freiwillig)<input type="text" data-b="${b.id}" data-k="fb.Gast" value="${esc(b.fb.Gast)}"></label>
+          </div>
+          <div class="bew">${bewHtml || `<p class="leise">Bewertungen nicht erkannt.</p>`}</div>
+          <div class="felder feld">
+            <label class="f">Stimmung<select data-b="${b.id}" data-k="fb.Stimmung">${optionen(CONFIG.stimmungen, b.fb.Stimmung, "–")}</select></label>
+            <label class="f">Priorität<select data-b="${b.id}" data-k="fb.Prioritaet">${optionen(CONFIG.prioritaeten, b.fb.Prioritaet)}</select></label>
+          </div>
+          ${[["Star","Mein Gut Steinbach Star","star"],["Gefallen","Besonders gut gefallen","gefallen"],["Verbessern","Was können wir verbessern?","verbessern"]].map(([k,l,img]) => `
+            <div class="feld"><label class="f">${l}
+              ${v ? `<img class="ausschnitt" src="${v.bild[img]}" alt="${l}, Handschrift">` : ""}
+              <textarea rows="1" data-b="${b.id}" data-k="fb.${k}">${esc(b.fb[k])}</textarea></label></div>`).join("")}
+          ${v ? `<details><summary>Erkennung ansehen</summary><img src="${v.vorschau}" alt="Vorderseite mit erkannten Kreuzen"></details>` : ""}
+        </div>
+      </div>` : "";
+    const tkTeil = `
+      <div class="teil${b.tk.aktiv?"":" aus"}" data-teil="tk">
+        <label class="schalter"><input type="checkbox" data-b="${b.id}" data-k="tk.aktiv"${b.tk.aktiv?" checked":""}> Technik-Ticket anlegen</label>
+        ${!hi ? `<p class="leise" style="margin:0">Keine Defektkarte erkannt. Einschalten, wenn der Gast unter „Verbessern“ einen Defekt nennt.</p>` : ""}
+        <div class="inhalt">
+          ${hi ? `<img class="ausschnitt" src="${hi.bild.zimmer}" alt="Zimmernummer, Handschrift">` : ""}
+          <div class="felder feld" style="margin-top:8px">
+            <label class="f">Zimmer${v?" (leer = wie Feedback)":""}<input type="text" inputmode="numeric" data-b="${b.id}" data-k="tk.Zimmer" value="${esc(b.tk.Zimmer)}"></label>
+            <label class="f">Priorität<select data-b="${b.id}" data-k="tk.Prioritaet">${optionen(CONFIG.prioritaeten, b.tk.Prioritaet)}</select></label>
+          </div>
+          <div class="feld"><span class="f">Kategorie${hi && hi.kats.length ? ` (Gast: ${esc(hi.kats.map(k=>k.txt).join(", "))})` : ""}</span>
+            <div class="chips">${CONFIG.kategorien.map(k => `<button type="button" data-b="${b.id}" data-kat="${esc(k)}" class="${b.tk.Kategorie===k?"an":""}">${esc(k)}</button>`).join("")}</div></div>
+          <div class="feld"><label class="f">Beschreibung
+            ${hi ? `<img class="ausschnitt" src="${hi.bild.beschreibung}" alt="Beschreibung, Handschrift">` : ""}
+            <textarea rows="1" data-b="${b.id}" data-k="tk.Beschreibung">${esc(b.tk.Beschreibung)}</textarea></label></div>
+          ${hi && hi.zutritt.length ? `<p class="leise">Zutritt: ${esc(hi.zutritt.join(", "))}</p>` : ""}
+          ${hi ? `<details><summary>Erkennung ansehen</summary><img src="${hi.vorschau}" alt="Rückseite mit erkannten Kreuzen"></details>` : ""}
+        </div>
+      </div>`;
+    const fehlerBild = b.fehler ? `<div class="teil"><img class="ausschnitt" src="${b.fehlerBild}" alt="Seite, nicht erkannt"></div>` : "";
+    const titel = v ? (hi ? "Bogen mit Defektkarte" : "Feedbackbogen") : hi ? "Defektkarte" : "Seite nicht erkannt";
+    return `<article class="bogen" data-id="${b.id}">
+      <div class="bogen-kopf"><h3>${b.id}. ${titel}</h3><button type="button" class="btn sek" data-weg="${b.id}" style="min-height:40px">Entfernen</button></div>
+      <div class="teil" style="padding-bottom:0"><div class="pruefen" data-pruefen="${b.id}"></div></div>
+      ${fehlerBild}${fbTeil}${tkTeil}
+    </article>`;
+  }).join("");
+  boegen.forEach(aktualisiere);
+  zusammenfassung();
+}
+function aktualisiere(b){
+  const el = document.querySelector(`[data-pruefen="${b.id}"]`);
+  if (el) el.innerHTML = pruefHinweise(b).map(esc).join("<br>");
+}
+function zusammenfassung(){
+  const f = boegen.filter(b => b.fb.aktiv).length, t = boegen.filter(b => b.tk.aktiv).length;
+  $("#zusammen").textContent = boegen.length ? `${f} Feedback${f===1?"":"s"}, ${t} Ticket${t===1?"":"s"}` : "Noch keine Bögen geladen";
+  $("#btnSenden").disabled = $("#btnLaden").disabled = !(f || t);
+}
+
+/* ===== Eingaben ===== */
+const finde = id => boegen.find(b => b.id === +id);
+function bearbeitet(e){
+  const t = e.target, b = finde(t.dataset.b); if (!b || !t.dataset.k) return;
+  const [teil, k] = t.dataset.k.split(".");
+  b[teil][k] = t.type === "checkbox" ? t.checked : t.value;
+  if (k === "Stimmung") b.fb.stimmungFest = true;
+  if (k === "aktiv") t.closest(".teil").classList.toggle("aus", !t.checked);
+  aktualisiere(b); zusammenfassung();
+}
+$("#liste").addEventListener("input", bearbeitet);
+$("#liste").addEventListener("change", bearbeitet);
+$("#liste").addEventListener("click", e => {
+  const t = e.target.closest("button"); if (!t) return;
+  const b = finde(t.dataset.b || t.dataset.weg);
+  if (t.dataset.weg){ boegen = boegen.filter(x => x !== b); zeichne(); return; }
+  if (!b) return;
+  if (t.dataset.wert){
+    const n = +t.dataset.n, k = t.dataset.wert;
+    b.fb.werte[k] = b.fb.werte[k] === n ? null : n;
+    t.parentElement.querySelectorAll("button").forEach(x => x.classList.toggle("an", +x.dataset.n === b.fb.werte[k]));
+    if (b.vorne) { b.vorne.bew[k].status = "ok"; t.closest(".bew-zeile").classList.remove("warn"); }
+    if (k === "Gesamt"){ stimmungSetzen(b); const art = t.closest("article");
+      art.querySelector('[data-k="fb.Stimmung"]').value = b.fb.Stimmung; art.querySelector('[data-k="fb.Prioritaet"]').value = b.fb.Prioritaet; }
+  }
+  if (t.dataset.kat){
+    b.tk.Kategorie = t.dataset.kat;
+    t.parentElement.querySelectorAll("button").forEach(x => x.classList.toggle("an", x === t));
+  }
+  aktualisiere(b);
+});
+
+/* ===== Datei bauen ===== */
+const zwei = n => String(n).padStart(2, "0");
+function baueDatei(){
+  const jetzt = new Date();
+  const stempel = `${jetzt.getFullYear()}${zwei(jetzt.getMonth()+1)}${zwei(jetzt.getDate())}${zwei(jetzt.getHours())}${zwei(jetzt.getMinutes())}`;
+  const zufall = Math.random().toString(36).slice(2,6).toUpperCase();
+  const von = $("#erfasstVon").value.trim(), datum = $("#datum").value;
+  const feedback = [], tickets = [];
+  boegen.forEach(b => {
+    if (b.fb.aktiv){
+      const f = b.fb, w = f.werte;
+      const teile = [];
+      if (f.Gefallen) teile.push("Gefallen: " + f.Gefallen.trim());
+      if (f.Verbessern) teile.push("Verbessern: " + f.Verbessern.trim());
+      if (f.Star) teile.push("Star: " + f.Star.trim());
+      feedback.push({
+        ImportID: `${CONFIG.kuerzel}-${stempel}-${zufall}-F${zwei(feedback.length+1)}`,
+        Titel: `Feedbackbogen Zi. ${f.Zimmer.trim() || "?"}`,
+        Zimmer: f.Zimmer.trim(), Gast: f.Gast.trim(), Stimmung: f.Stimmung, Prioritaet: f.Prioritaet, Status: "Neu",
+        Feedback: teile.join("\n"),
+        Gesamt: w.Gesamt ?? null, Reservierung: w.Reservierung ?? null, Checkin: w.Checkin ?? null, BewZimmer: w.BewZimmer ?? null,
+        Fruehstueck: w.Fruehstueck ?? null, Abendessen: w.Abendessen ?? null, SPA: w.SPA ?? null,
+        Star: f.Star.trim(), Gefallen: f.Gefallen.trim(), Verbessern: f.Verbessern.trim(),
+        ProtokolliertVon: `${von} (Feedbackbogen)`, Datum: datum
+      });
+    }
+    if (b.tk.aktiv){
+      const t = b.tk, zi = tkZimmer(b).trim();
+      const kurz = t.Beschreibung.trim() || t.Kategorie;
+      let beschr = `Gast (Feedbackbogen): ${t.Beschreibung.trim()}`;
+      if (t.zutritt.length) beschr += `\nZutritt: ${t.zutritt.join(", ")}`;
+      tickets.push({
+        ImportID: `${CONFIG.kuerzel}-${stempel}-${zufall}-T${zwei(tickets.length+1)}`,
+        Titel: `Zi. ${zi} – ${kurz}`.slice(0, 120),
+        Beschreibung: beschr, Kategorie: t.Kategorie, Prioritaet: t.Prioritaet, Status: "Offen",
+        GemeldetVon: "Gast (Feedbackbogen)", Standort: CONFIG.standort
+      });
+    }
+  });
+  const daten = {typ:"feedbackbogen", version:1, haus:CONFIG.haus, erstellt: jetzt.toISOString(), erfasstVon: von, feedback, tickets};
+  const name = `feedbackboegen_${datum}_${zwei(jetzt.getHours())}${zwei(jetzt.getMinutes())}.json`;
+  return {name, daten, file: new File([JSON.stringify(daten, null, 2)], name, {type:"application/json"})};
+}
+function pruefeAlles(){
+  if (!$("#erfasstVon").value.trim()) return "Bitte oben „Erfasst von“ ausfüllen.";
+  const ohneZimmer = boegen.filter(b => b.tk.aktiv && !tkZimmer(b).trim());
+  if (ohneZimmer.length) return `Bei Bogen ${ohneZimmer.map(b=>b.id).join(", ")} fehlt die Zimmernummer für das Ticket.`;
+  const ohneKat = boegen.filter(b => b.tk.aktiv && !b.tk.Kategorie);
+  if (ohneKat.length) return `Bei Bogen ${ohneKat.map(b=>b.id).join(", ")} fehlt die Ticket-Kategorie.`;
+  return "";
+}
+function herunterladen(f){
+  const a = document.createElement("a"); a.href = URL.createObjectURL(f.file); a.download = f.name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+function status(text, art){ const s = $("#status"); s.className = art || ""; s.innerHTML = text; if (text) s.scrollIntoView({behavior:"smooth", block:"start"}); }
+function fertigMeldung(f, weg){
+  const n = f.daten.feedback.length, t = f.daten.tickets.length;
+  status(`${weg} ${n} Feedback${n===1?"":"s"} und ${t} Ticket${t===1?"":"s"} in <b>${esc(f.name)}</b>.
+    <div class="adresse">An: <code>${esc(CONFIG.mail)}</code><button class="btn sek" id="kopier" style="min-height:36px">Adresse kopieren</button>
+    <button class="btn sek" id="neu" style="min-height:36px">Neue Bögen</button></div>`, "ok");
+  $("#kopier").onclick = () => navigator.clipboard && navigator.clipboard.writeText(CONFIG.mail);
+  $("#neu").onclick = () => { boegen = []; zeichne(); status(""); window.scrollTo(0,0); };
+}
+
+$("#btnSenden").onclick = async () => {
+  const fehler = pruefeAlles(); if (fehler) return status(fehler, "fehler");
+  const f = baueDatei();
+  const betreff = `[FB-Import] ${CONFIG.haus} ${f.daten.feedback.length} Feedbacks / ${f.daten.tickets.length} Tickets`;
+  if (navigator.canShare && navigator.canShare({files:[f.file]})){
+    try {
+      await navigator.share({files:[f.file], title: betreff, text: `Bitte an ${CONFIG.mail} senden.`});
+      fertigMeldung(f, "Geteilt:"); return;
+    } catch(e){ if (e.name === "AbortError") return; }
+  }
+  herunterladen(f);
+  fertigMeldung(f, "Heruntergeladen:");
+  setTimeout(() => { location.href = `mailto:${CONFIG.mail}?subject=${encodeURIComponent(betreff)}&body=${encodeURIComponent("Datei " + f.name + " aus dem Download-Ordner anhängen.")}`; }, 400);
+};
+$("#btnLaden").onclick = () => {
+  const fehler = pruefeAlles(); if (fehler) return status(fehler, "fehler");
+  const f = baueDatei(); herunterladen(f); fertigMeldung(f, "Heruntergeladen:");
+};
+
+/* ===== Start ===== */
+$("#hausname").textContent = CONFIG.haus;
+const heute = new Date(); $("#datum").value = `${heute.getFullYear()}-${zwei(heute.getMonth()+1)}-${zwei(heute.getDate())}`;
+try { $("#erfasstVon").value = localStorage.getItem("fb_erfasstVon") || ""; } catch(e){}
+$("#erfasstVon").addEventListener("change", e => { try { localStorage.setItem("fb_erfasstVon", e.target.value.trim()); } catch(_){} });
+$("#dateien").addEventListener("change", e => { verarbeite([...e.target.files]); e.target.value = ""; });
+const drop = $("#drop");
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => verarbeite([...e.dataTransfer.files]));
+</script>
+</body>
+</html>
